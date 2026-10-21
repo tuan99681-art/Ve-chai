@@ -1,0 +1,6 @@
+{
+  "name": "VeChaiXanh - Nền Tảng Thu Gom & Mua Bán Ve Chai Phế Liệu Thông Minh",
+  "description": "Ứng dụng kết nối thông minh giữa người bán ve chai và người thu mua phế liệu với bản đồ định vị, định giá thị trường, trò chuyện trực tiếp, ví điện tử và quản trị chuyên nghiệp.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
