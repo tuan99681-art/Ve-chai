@@ -27,7 +27,8 @@ import {
   Eye,
   EyeOff,
   UserPlus,
-  ShoppingBag
+  ShoppingBag,
+  Bell
 } from 'lucide-react';
 
 export const ProfilePage: React.FC = () => {
@@ -36,7 +37,12 @@ export const ProfilePage: React.FC = () => {
     updateUserProfile, 
     reviews, 
     hasActiveScrapListing,
-    setShowAuthModal
+    setShowAuthModal,
+    pushPermission,
+    requestPushPermission,
+    triggerPushNotification,
+    isPushSoundEnabled,
+    setIsPushSoundEnabled
   } = useApp();
 
   const isSeller = currentUser.role === 'seller';
@@ -296,6 +302,70 @@ export const ProfilePage: React.FC = () => {
               </div>
             ))
           )}
+        </div>
+      </div>
+
+      {/* 5. CÀI ĐẶT THÔNG BÁO ĐẨY (PUSH NOTIFICATIONS) */}
+      <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+              <Bell className="w-5 h-5 text-purple-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900 text-sm">Cài Đặt Thông Báo Đẩy (Push Notifications)</h3>
+              <p className="text-xs text-slate-500">Nhận thông báo nổi tức thì khi có người mua gần bạn & lịch thu gom</p>
+            </div>
+          </div>
+
+          <span className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-bold ${
+            pushPermission === 'granted' 
+              ? 'bg-emerald-100 text-emerald-800' 
+              : 'bg-amber-100 text-amber-800'
+          }`}>
+            {pushPermission === 'granted' ? '✓ Đã kích hoạt' : 'Chưa cấp quyền'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
+          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+            <div>
+              <span className="font-bold text-slate-800 block">Âm thanh chuông báo</span>
+              <span className="text-[11px] text-slate-500">Phát âm thanh khi có thông báo đẩy mới</span>
+            </div>
+            <button
+              onClick={() => setIsPushSoundEnabled(!isPushSoundEnabled)}
+              className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-colors ${
+                isPushSoundEnabled 
+                  ? 'bg-emerald-600 text-white' 
+                  : 'bg-slate-200 text-slate-600'
+              }`}
+            >
+              {isPushSoundEnabled ? 'Bật chuông' : 'Tắt chuông'}
+            </button>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+            <div>
+              <span className="font-bold text-slate-800 block">Quyền Web Notification</span>
+              <span className="text-[11px] text-slate-500">Hiện thông báo ngoài màn hình thiết bị</span>
+            </div>
+            {pushPermission !== 'granted' && pushPermission !== 'unsupported' ? (
+              <button
+                onClick={requestPushPermission}
+                className="px-3 py-1.5 rounded-xl bg-purple-900 hover:bg-purple-800 text-white font-bold text-xs shadow-xs"
+              >
+                Cấp quyền ngay
+              </button>
+            ) : (
+              <button
+                onClick={() => triggerPushNotification('🔔 Kiểm Tra Thông Báo Đẩy', 'Hệ thống thông báo đẩy đang hoạt động hoàn hảo trên thiết bị của bạn!')}
+                className="px-3 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs"
+              >
+                Thử nghiệm
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

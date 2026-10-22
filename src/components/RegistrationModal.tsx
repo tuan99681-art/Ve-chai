@@ -40,6 +40,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({ isOpen, on
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState<UserRole>('seller');
   const [phone, setPhone] = useState('');
+  const [selectedCity, setSelectedCity] = useState('TP. Hồ Chí Minh');
   const [address, setAddress] = useState('120 Hai Bà Trưng, P. Tân Định, Quận 1, TP. Hồ Chí Minh');
   const [lat, setLat] = useState(10.7890);
   const [lng, setLng] = useState(106.6965);
@@ -51,6 +52,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({ isOpen, on
   const [enteredOtp, setEnteredOtp] = useState<string>('');
   const [otpError, setOtpError] = useState<string>('');
   const [isDetectingGps, setIsDetectingGps] = useState(false);
+  const [showLocationDialog, setShowLocationDialog] = useState(false);
 
   if (!isOpen) return null;
 
@@ -76,28 +78,61 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({ isOpen, on
     setOtpError('');
   };
 
-  // Tự động định vị GPS vị trí hiện tại
-  const handleAutoLocate = () => {
+  // Thực hiện định vị GPS khi người dùng bấm "Đồng ý cho phép"
+  const executeGpsDetect = () => {
+    setShowLocationDialog(false);
     setIsDetectingGps(true);
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           setLat(pos.coords.latitude);
           setLng(pos.coords.longitude);
-          setAddress(`Tọa độ GPS: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)} - Khu vực TP. Hồ Chí Minh`);
+          setAddress(`Tọa độ GPS: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)} - ${selectedCity}`);
           setIsDetectingGps(false);
         },
         () => {
-          // Fallback location trung tâm TP.HCM
-          setLat(10.7850 + (Math.random() - 0.5) * 0.02);
-          setLng(106.6950 + (Math.random() - 0.5) * 0.02);
-          setAddress('Khu vực trung tâm TP. Hồ Chí Minh');
+          // Fallback location theo thành phố đã chọn
+          if (selectedCity === 'Hà Nội') {
+            setLat(21.0285 + (Math.random() - 0.5) * 0.02);
+            setLng(105.8542 + (Math.random() - 0.5) * 0.02);
+            setAddress('Khu vực trung tâm TP. Hà Nội');
+          } else if (selectedCity === 'Đà Nẵng') {
+            setLat(16.0544 + (Math.random() - 0.5) * 0.02);
+            setLng(108.2022 + (Math.random() - 0.5) * 0.02);
+            setAddress('Khu vực trung tâm TP. Đà Nẵng');
+          } else {
+            setLat(10.7850 + (Math.random() - 0.5) * 0.02);
+            setLng(106.6950 + (Math.random() - 0.5) * 0.02);
+            setAddress('Khu vực trung tâm TP. Hồ Chí Minh');
+          }
           setIsDetectingGps(false);
         },
         { timeout: 5000 }
       );
     } else {
       setIsDetectingGps(false);
+    }
+  };
+
+  // Đổi thành phố nhanh
+  const handleCityChange = (city: string) => {
+    setSelectedCity(city);
+    if (city === 'Hà Nội') {
+      setLat(21.0285);
+      setLng(105.8542);
+      setAddress('36 Cầu Giấy, P. Quan Hoa, Quận Cầu Giấy, Hà Nội');
+    } else if (city === 'Đà Nẵng') {
+      setLat(16.0544);
+      setLng(108.2022);
+      setAddress('88 Nguyễn Văn Linh, P. Nam Dương, Quận Hải Châu, Đà Nẵng');
+    } else if (city === 'Bình Dương') {
+      setLat(10.9804);
+      setLng(106.6519);
+      setAddress('Đại lộ Bình Dương, TP. Thủ Dầu Một, Bình Dương');
+    } else {
+      setLat(10.7890);
+      setLng(106.6965);
+      setAddress('120 Hai Bà Trưng, P. Tân Định, Quận 1, TP. Hồ Chí Minh');
     }
   };
 
@@ -118,6 +153,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({ isOpen, on
       phone: phone.trim(),
       role,
       address: address.trim(),
+      city: selectedCity,
       lat,
       lng,
       vehicleType: role === 'buyer' ? vehicleType : undefined
@@ -242,32 +278,94 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({ isOpen, on
             </div>
           )}
 
-          {/* 3. Vị trí & Địa chỉ */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="font-bold text-slate-700">
-                Vị trí thu gom / cư trú: <span className="text-rose-500">*</span>
+          {/* 3. Tỉnh / Thành Phố & Vị trí cư trú */}
+          <div className="space-y-2.5">
+            <div>
+              <label className="font-bold text-slate-700 block mb-1">
+                Tỉnh / Thành phố: <span className="text-rose-500">*</span>
               </label>
-              <button
-                type="button"
-                onClick={handleAutoLocate}
-                disabled={isDetectingGps}
-                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 hover:underline"
+              <select
+                value={selectedCity}
+                onChange={(e) => handleCityChange(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 text-slate-800 text-xs font-semibold focus:bg-white focus:border-emerald-500"
               >
-                <Navigation className={`w-3 h-3 ${isDetectingGps ? 'animate-spin' : ''}`} />
-                <span>{isDetectingGps ? 'Đang lấy vị trí...' : 'Lấy vị trí GPS hiện tại'}</span>
-              </button>
+                <option value="TP. Hồ Chí Minh">TP. Hồ Chí Minh</option>
+                <option value="Hà Nội">Hà Nội</option>
+                <option value="Đà Nẵng">Đà Nẵng</option>
+                <option value="Hải Phòng">Hải Phòng</option>
+                <option value="Cần Thơ">Cần Thơ</option>
+                <option value="Bình Dương">Bình Dương</option>
+                <option value="Đồng Nai">Đồng Nai</option>
+                <option value="Bà Rịa - Vũng Tàu">Bà Rịa - Vũng Tàu</option>
+                <option value="Quảng Ninh">Quảng Ninh</option>
+              </select>
             </div>
-            <div className="relative">
-              <input
-                type="text"
-                required
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="Số nhà, tên đường, phường/xã, quận/huyện..."
-                className="w-full px-3.5 py-2.5 pl-9 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:border-emerald-500 text-slate-800 text-xs font-semibold"
-              />
-              <MapPin className="w-4 h-4 text-emerald-600 absolute left-3 top-3" />
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="font-bold text-slate-700">
+                  Địa chỉ chi tiết: <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowLocationDialog(true)}
+                  disabled={isDetectingGps}
+                  className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 hover:underline"
+                >
+                  <Navigation className={`w-3 h-3 ${isDetectingGps ? 'animate-spin' : ''}`} />
+                  <span>{isDetectingGps ? 'Đang lấy vị trí...' : 'Lấy vị trí GPS hiện tại'}</span>
+                </button>
+              </div>
+
+              {/* HỘP THOẠI YÊU CẦU QUYỀN TRUY CẬP VỊ TRÍ ĐỊA LÝ HOÀN TOÀN BẰNG TIẾNG VIỆT */}
+              {showLocationDialog && (
+                <div className="mb-2.5 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-300 text-xs space-y-2 animate-in fade-in">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-emerald-950 flex items-center gap-1.5">
+                      <Navigation className="w-4 h-4 text-emerald-700" />
+                      Yêu cầu quyền truy cập vị trí địa lý
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowLocationDialog(false)}
+                      className="text-slate-400 hover:text-slate-700 font-bold p-0.5"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <p className="text-slate-700 text-[11px] leading-relaxed">
+                    Ứng dụng cần quyền truy cập vị trí địa lý để hoạt động chính xác. Bạn có muốn cho phép truy cập vị trí địa lý không?
+                  </p>
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowLocationDialog(false)}
+                      className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 rounded-lg font-bold border border-slate-200 text-xs"
+                    >
+                      Đóng
+                    </button>
+                    <button
+                      type="button"
+                      onClick={executeGpsDetect}
+                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold shadow-xs text-xs"
+                    >
+                      Đồng ý cho phép
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Số nhà, tên đường, phường/xã, quận/huyện..."
+                  className="w-full px-3.5 py-2.5 pl-9 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:border-emerald-500 text-slate-800 text-xs font-semibold"
+                />
+                <MapPin className="w-4 h-4 text-emerald-600 absolute left-3 top-3" />
+              </div>
             </div>
           </div>
 

@@ -32,7 +32,9 @@ export const TopHeader: React.FC = () => {
     unreadNotificationCount, 
     markNotificationRead, 
     clearAllNotifications,
-    setShowAuthModal
+    setShowAuthModal,
+    pushPermission,
+    requestPushPermission
   } = useApp();
 
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
@@ -207,6 +209,26 @@ export const TopHeader: React.FC = () => {
                       <X className="w-4 h-4" />
                     </button>
                   </div>
+                </div>
+
+                {/* Banner Bật Thông Báo Đẩy */}
+                <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-[11px]">
+                  <span className="text-slate-600 flex items-center gap-1 font-medium">
+                    <Bell className="w-3.5 h-3.5 text-purple-600" />
+                    Thông báo đẩy:
+                  </span>
+                  {pushPermission !== 'granted' && pushPermission !== 'unsupported' ? (
+                    <button
+                      onClick={requestPushPermission}
+                      className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                    >
+                      Bật ngay
+                    </button>
+                  ) : (
+                    <span className="text-emerald-700 font-semibold font-mono">
+                      ✓ Đang bật
+                    </span>
+                  )}
                 </div>
 
                 <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">

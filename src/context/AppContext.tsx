@@ -21,6 +21,7 @@ import {
   AbnormalActivityLog,
   SystemNotification,
   CityAnnouncement,
+  PushNotification,
   OrderStatus,
   KYCStatus
 } from '../types';
@@ -109,11 +110,28 @@ export interface AppContextType {
   confirmDirectPayment: (orderId: string, method: 'cash' | 'direct_bank') => void;
 
   // Quản trị viên
+  deleteUser: (userId: string) => { success: boolean; message: string };
   disputes: Dispute[];
   resolveDispute: (disputeId: string, resolutionNote: string, status: 'resolved' | 'dismissed') => void;
   anomalies: AbnormalActivityLog[];
   flagUser: (userId: string, reason: string) => void;
   broadcastNotification: (title: string, message: string, type?: SystemNotification['type']) => void;
+
+  // Hệ thống thông báo đẩy (Push Notifications)
+  pushPermission: NotificationPermission | 'unsupported';
+  requestPushPermission: () => Promise<boolean>;
+  triggerPushNotification: (
+    title: string,
+    body: string,
+    url?: string,
+    targetCity?: string,
+    targetRole?: 'all' | 'seller' | 'buyer',
+    urgency?: 'normal' | 'high'
+  ) => void;
+  activePushToast: PushNotification | null;
+  dismissPushToast: () => void;
+  isPushSoundEnabled: boolean;
+  setIsPushSoundEnabled: (enabled: boolean) => void;
 
   // Thông báo chạy chữ theo Tỉnh / Thành Phố (City Announcements & Direct Messages)
   cityAnnouncements: CityAnnouncement[];
@@ -125,7 +143,7 @@ export interface AppContextType {
   adminPreviewCity: string;
   setAdminPreviewCity: (city: string) => void;
 
-  // Thông báo
+  // Thông báo nội bộ & chuông
   notifications: SystemNotification[];
   markNotificationRead: (id: string) => void;
   clearAllNotifications: () => void;
@@ -208,6 +226,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
   });
 
+  // Thông báo thu gom theo Tỉnh / Thành Phố (City Announcements)
+  const [cityAnnouncements, setCityAnnouncements] = useState<CityAnnouncement[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.CITY_ANNOUNCEMENTS);
+    return saved ? JSON.parse(saved) : INITIAL_CITY_ANNOUNCEMENTS;
+  });
+
+  const [adminPreviewCity, setAdminPreviewCity] = useState<string>('Toàn quốc');
+
+  // Trạng thái thông báo đẩy (Push Notifications)
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission;
+    }
+    return 'unsupported';
+  });
+
+  const [activePushToast, setActivePushToast] = useState<PushNotification | null>(null);
+  const [isPushSoundEnabled, setIsPushSoundEnabled] = useState<boolean>(true);
+
   // Trạng thái hiển thị form đăng ký xác thực SĐT cho người mới vào app
   const [showAuthModal, setShowAuthModal] = useState<boolean>(() => {
     // Nếu người dùng chưa từng hoàn tất đăng ký/đăng nhập thì mở modal đăng ký
@@ -256,6 +293,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifications));
   }, [notifications]);
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.CITY_ANNOUNCEMENTS, JSON.stringify(cityAnnouncements));
+  }, [cityAnnouncements]);
 
   const currentUser = users.find(u => u.id === currentUserId) || users[0];
 
@@ -273,6 +313,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     address: string;
     lat: number;
     lng: number;
+    city?: string;
+    district?: string;
     idCardNumber?: string;
     vehicleType?: string;
   }): UserProfile => {
@@ -288,8 +330,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         lat: data.lat || 10.7769,
         lng: data.lng || 106.7009,
         address: data.address,
-        district: 'Quận 1',
-        city: 'TP. Hồ Chí Minh'
+        district: data.district || 'Quận 1',
+        city: data.city || 'TP. Hồ Chí Minh'
       },
       isPhoneVerified: true,
       reputationScore: 5.0,
@@ -642,6 +684,285 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ]);
   };
 
+  // 1. Âm thanh chuông báo đẩy (Web Audio API Synthesizer)
+  const playNotificationChime = () => {
+    if (!isPushSoundEnabled) return;
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const audioCtx = new AudioCtx();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.12); // A5
+      gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.32);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.32);
+    } catch {
+      // Ignored if autoplay limitation
+    }
+  };
+
+  // 2. Yêu cầu cấp quyền Web Notification của trình duyệt
+  const requestPushPermission = async (): Promise<boolean> => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      broadcastNotification('Thông báo đẩy', 'Trình duyệt này không hỗ trợ Web Notification API.', 'system');
+      return false;
+    }
+    try {
+      const perm = await Notification.requestPermission();
+      setPushPermission(perm);
+      if (perm === 'granted') {
+        triggerPushNotification(
+          '🔔 Đã Bật Thông Báo Đẩy Thành Công!',
+          'Bạn sẽ nhận thông báo tức thì khi có người mua gần bạn, đơn hàng mới và lịch thu gom của Ban quản trị.'
+        );
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Lỗi yêu cầu quyền thông báo đẩy:', err);
+      return false;
+    }
+  };
+
+  // 3. Phát thông báo đẩy thời gian thực (Push Notification Banner + Web Notification)
+  const triggerPushNotification = (
+    title: string,
+    body: string,
+    url: string = '/chat',
+    targetCity?: string,
+    targetRole: 'all' | 'seller' | 'buyer' = 'all',
+    urgency: 'normal' | 'high' = 'normal'
+  ) => {
+    playNotificationChime();
+
+    const newPush: PushNotification = {
+      id: `push-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      title,
+      body,
+      targetRole,
+      targetCity,
+      urgency,
+      url,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setActivePushToast(newPush);
+
+    // Tự động tắt sau 6.5s
+    setTimeout(() => {
+      setActivePushToast(prev => (prev?.id === newPush.id ? null : prev));
+    }, 6500);
+
+    // Nếu đã cấp quyền trình duyệt, bắn ra native Web Notification
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(title, {
+          body,
+          icon: 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=100&auto=format&fit=crop&q=80',
+          tag: newPush.id
+        });
+      } catch {
+        // Ignored
+      }
+    }
+
+    // Đồng bộ vào chuông thông báo nội bộ
+    const newNotif: SystemNotification = {
+      id: `notif-${Date.now()}`,
+      title,
+      message: body,
+      type: 'system',
+      isRead: false,
+      createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setNotifications(prev => [newNotif, ...prev]);
+  };
+
+  const dismissPushToast = () => setActivePushToast(null);
+
+  // 4. Xóa người bán và người mua (Admin capability)
+  const deleteUser = (userId: string): { success: boolean; message: string } => {
+    const target = users.find(u => u.id === userId);
+    if (!target) {
+      return { success: false, message: 'Không tìm thấy người dùng cần xóa.' };
+    }
+    if (target.role === 'admin' || target.id === 'usr-admin-01') {
+      return { success: false, message: 'Không được phép xóa tài khoản Ban Quản Trị Hệ Thống.' };
+    }
+
+    // 1. Xóa người dùng khỏi danh sách
+    setUsers(prev => prev.filter(u => u.id !== userId));
+
+    // 2. Cập nhật các đơn hàng liên quan: hủy đơn chưa hoàn tất
+    setOrders(prev => prev.map(o => {
+      if ((o.sellerId === userId || o.buyerId === userId) && o.status !== 'completed' && o.status !== 'cancelled') {
+        return {
+          ...o,
+          status: 'cancelled',
+          notes: `${o.notes || ''} [Hệ thống hủy tự động: Tài khoản ${target.fullName} đã bị Quản Trị Viên xóa]`
+        };
+      }
+      return o;
+    }));
+
+    // 3. Nếu đang switch vào tài khoản này, đổi về tài khoản Admin
+    if (currentUserId === userId) {
+      const admin = users.find(u => u.role === 'admin') || users[0];
+      setCurrentUserId(admin.id);
+    }
+
+    // 4. Phát thông báo
+    broadcastNotification(
+      'Quản trị viên đã xóa thành viên',
+      `Tài khoản "${target.fullName}" (${target.role === 'buyer' ? 'Người Thu Mua' : 'Người Bán'}, SĐT: ${target.phone}) đã bị xóa khỏi hệ thống.`,
+      'system'
+    );
+
+    triggerPushNotification(
+      '🗑️ Đã Xóa Thành Viên Thành Công',
+      `Đã xóa tài khoản "${target.fullName}" (${target.phone}) khỏi hệ thống VeChaiXanh.`,
+      '/admin'
+    );
+
+    return {
+      success: true,
+      message: `Đã xóa thành công tài khoản "${target.fullName}" (${target.phone}).`
+    };
+  };
+
+  // 5. Quản lý thông báo thu gom theo Tỉnh / Thành phố & Tự động gửi tin nhắn Chat
+  const sendAnnouncementMessagesToCity = (announcementId: string): number => {
+    const annom = cityAnnouncements.find(a => a.id === announcementId);
+    if (!annom) return 0;
+
+    // Tìm tất cả người dùng thuộc thành phố này (trừ admin)
+    const targetUsers = users.filter(u => 
+      u.role !== 'admin' && 
+      u.id !== 'usr-admin-01' && 
+      isUserInCity(u.location?.city, u.location?.address, annom.city)
+    );
+
+    if (targetUsers.length === 0) {
+      return 0;
+    }
+
+    const adminUser = users.find(u => u.role === 'admin') || users[0];
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const formattedMessage = `📢 [THÔNG BÁO TỪ BAN QUẢN TRỊ VECHAIXANH - ĐOÀN THU GOM TẠI ${annom.city.toUpperCase()}]\n\nKính gửi Quý thành viên!\n\n${annom.content}\n\n🗓️ Thời gian đoàn xe đến: ${annom.pickupDate}\n📍 Địa bàn trọng điểm: ${annom.district || annom.city}\n📦 Mặt hàng ưu tiên thu mua: ${annom.scrapTypes.join(', ')}\n🎁 Chính sách ưu đãi: ${annom.priceBonus || 'Cân điện tử chuẩn xác, giá thu mua cao'}\n📞 Hotline điều phối lưu động: ${annom.contactPhone}\n\n👉 Quý thành viên có ve chai cần bán hãy đăng đơn trên ứng dụng hoặc phản hồi trực tiếp vào tin nhắn này để đoàn xe ghé tận nơi!`;
+
+    setConversations(prev => {
+      let updated = [...prev];
+      targetUsers.forEach(u => {
+        const existingIdx = updated.findIndex(c =>
+          (c.participantIds.includes(adminUser.id) && c.participantIds.includes(u.id)) ||
+          (c.participantIds.includes('usr-admin-01') && c.participantIds.includes(u.id))
+        );
+
+        const newMsg: ChatMessage = {
+          id: `msg-annom-${Date.now()}-${u.id}`,
+          senderId: adminUser.id,
+          senderName: 'Ban Quản Trị VeChaiXanh',
+          senderRole: 'admin',
+          text: formattedMessage,
+          timestamp: nowTime
+        };
+
+        if (existingIdx >= 0) {
+          const conv = updated[existingIdx];
+          updated[existingIdx] = {
+            ...conv,
+            lastMessage: `📢 [Thông báo]: Đoàn thu gom tại ${annom.city} ngày ${annom.pickupDate}`,
+            lastMessageTime: nowTime,
+            unreadCount: {
+              ...conv.unreadCount,
+              [u.id]: (conv.unreadCount[u.id] || 0) + 1
+            },
+            messages: [...conv.messages, newMsg]
+          };
+        } else {
+          const newConv: Conversation = {
+            id: `conv-admin-${u.id}-${Date.now()}`,
+            participantIds: [adminUser.id, u.id],
+            lastMessage: `📢 [Thông báo]: Đoàn thu gom tại ${annom.city} ngày ${annom.pickupDate}`,
+            lastMessageTime: nowTime,
+            unreadCount: {
+              [adminUser.id]: 0,
+              [u.id]: 1
+            },
+            messages: [newMsg]
+          };
+          updated = [newConv, ...updated];
+        }
+      });
+      return updated;
+    });
+
+    // Cập nhật số lượng người đã nhận được tin nhắn
+    setCityAnnouncements(prev => prev.map(a => 
+      a.id === announcementId ? { ...a, recipientCount: targetUsers.length } : a
+    ));
+
+    // Kích hoạt thông báo đẩy
+    triggerPushNotification(
+      `📢 Ban Quản Trị: Thu Gom Tại ${annom.city}`,
+      `Đoàn xe thu mua đến ${annom.city} ngày ${annom.pickupDate}. Đã tự động gửi tin nhắn chi tiết vào Chat của ${targetUsers.length} thành viên!`,
+      '/chat',
+      annom.city
+    );
+
+    return targetUsers.length;
+  };
+
+  const addCityAnnouncement = (
+    announcement: Omit<CityAnnouncement, 'id' | 'createdAt' | 'recipientCount'>
+  ): CityAnnouncement => {
+    const newId = `annom-${Date.now()}`;
+    const newAnnom: CityAnnouncement = {
+      ...announcement,
+      id: newId,
+      recipientCount: 0,
+      createdAt: new Date().toLocaleString('vi-VN')
+    };
+
+    setCityAnnouncements(prev => [newAnnom, ...prev]);
+
+    // Tự động gửi tin nhắn đến hộp thư Chat nếu được bật
+    if (announcement.sendDirectMessage !== false) {
+      setTimeout(() => {
+        sendAnnouncementMessagesToCity(newId);
+      }, 100);
+    } else {
+      triggerPushNotification(
+        `📢 Thông Báo Mới: Thu Gom Tại ${announcement.city}`,
+        announcement.title,
+        '/',
+        announcement.city
+      );
+    }
+
+    return newAnnom;
+  };
+
+  const updateCityAnnouncement = (id: string, data: Partial<CityAnnouncement>) => {
+    setCityAnnouncements(prev => prev.map(a => a.id === id ? { ...a, ...data } : a));
+  };
+
+  const deleteCityAnnouncement = (id: string) => {
+    setCityAnnouncements(prev => prev.filter(a => a.id !== id));
+    broadcastNotification('Thông báo', 'Đã xóa thông báo thu gom của tỉnh/thành phố.', 'system');
+  };
+
+  const toggleCityAnnouncementStatus = (id: string) => {
+    setCityAnnouncements(prev => prev.map(a => a.id === id ? { ...a, isActive: !a.isActive } : a));
+  };
+
   const broadcastNotification = (title: string, message: string, type: SystemNotification['type'] = 'system') => {
     const newNotif: SystemNotification = {
       id: `notif-${Date.now()}`,
@@ -702,11 +1023,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         confirmDirectPayment,
 
+        deleteUser,
         disputes,
         resolveDispute,
         anomalies,
         flagUser,
         broadcastNotification,
+
+        pushPermission,
+        requestPushPermission,
+        triggerPushNotification,
+        activePushToast,
+        dismissPushToast,
+        isPushSoundEnabled,
+        setIsPushSoundEnabled,
+
+        cityAnnouncements,
+        addCityAnnouncement,
+        updateCityAnnouncement,
+        deleteCityAnnouncement,
+        toggleCityAnnouncementStatus,
+        sendAnnouncementMessagesToCity,
+        adminPreviewCity,
+        setAdminPreviewCity,
 
         notifications,
         markNotificationRead,

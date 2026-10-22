@@ -118,13 +118,20 @@ export const ChatPage: React.FC = () => {
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">
-                      <h4 className="font-bold text-xs text-slate-900 truncate">
-                        {partner?.fullName || 'Người dùng'}
-                      </h4>
+                      <div className="flex items-center gap-1 min-w-0">
+                        {partner?.role === 'admin' && (
+                          <span className="px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 text-[9px] font-bold shrink-0 font-mono">
+                            BQT
+                          </span>
+                        )}
+                        <h4 className="font-bold text-xs text-slate-900 truncate">
+                          {partner?.fullName || 'Người dùng'}
+                        </h4>
+                      </div>
                       <span className="text-[10px] text-slate-400 shrink-0">{conv.lastMessageTime}</span>
                     </div>
 
-                    <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                    <p className={`text-[11px] truncate mt-0.5 ${partner?.role === 'admin' ? 'text-purple-800 font-medium' : 'text-slate-500'}`}>
                       {conv.lastMessage}
                     </p>
                   </div>
@@ -160,17 +167,25 @@ export const ChatPage: React.FC = () => {
                   className="w-9 h-9 rounded-full object-cover border border-slate-200"
                 />
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="font-bold text-xs sm:text-sm text-slate-900">{otherUser.fullName}</h3>
                     <span className={`px-2 py-0.2 rounded-full text-[10px] font-bold ${
-                      otherUser.role === 'buyer' ? 'bg-sky-100 text-sky-800' : 'bg-emerald-100 text-emerald-800'
+                      otherUser.role === 'admin'
+                        ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                        : otherUser.role === 'buyer' 
+                        ? 'bg-sky-100 text-sky-800' 
+                        : 'bg-emerald-100 text-emerald-800'
                     }`}>
-                      {otherUser.role === 'buyer' ? 'Người Thu Mua' : 'Người Bán'}
+                      {otherUser.role === 'admin' 
+                        ? '🛡️ Ban Quản Trị' 
+                        : otherUser.role === 'buyer' 
+                        ? 'Người Thu Mua' 
+                        : 'Người Bán'}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                    <span>Đang trực tuyến • {otherUser.location.address}</span>
+                    <span>Đang trực tuyến • {otherUser.location?.address}</span>
                   </p>
                 </div>
               </div>
@@ -191,13 +206,21 @@ export const ChatPage: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {currentConv.messages.map(msg => {
                 const isMe = msg.senderId === currentUser.id;
+                const isAdminAnnouncement = msg.senderRole === 'admin' || msg.text.startsWith('📢 [THÔNG BÁO');
+
                 return (
                   <div
                     key={msg.id}
                     className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
                   >
                     <div className="flex items-center gap-1 text-[10px] text-slate-400 mb-1 px-1">
-                      <span>{isMe ? 'Bạn' : msg.senderName}</span>
+                      {isAdminAnnouncement ? (
+                        <span className="font-bold text-purple-700 flex items-center gap-1">
+                          🛡️ {msg.senderName} (Ban Quản Trị)
+                        </span>
+                      ) : (
+                        <span>{isMe ? 'Bạn' : msg.senderName}</span>
+                      )}
                       <span>• {msg.timestamp}</span>
                     </div>
 
@@ -205,10 +228,23 @@ export const ChatPage: React.FC = () => {
                       className={`max-w-[85%] sm:max-w-md px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed shadow-xs ${
                         isMe
                           ? 'bg-emerald-600 text-white rounded-tr-xs'
+                          : isAdminAnnouncement
+                          ? 'bg-gradient-to-br from-purple-50 via-indigo-50/50 to-white text-slate-900 border-2 border-purple-300 rounded-tl-xs shadow-md'
                           : 'bg-white text-slate-800 border border-slate-200/80 rounded-tl-xs'
                       }`}
                     >
-                      {msg.text}
+                      {isAdminAnnouncement && (
+                        <div className="flex items-center gap-1.5 pb-2 mb-2 border-b border-purple-200 text-purple-900 font-bold text-[11px]">
+                          <span className="px-1.5 py-0.5 rounded bg-purple-200/70 text-purple-950 font-mono text-[10px]">
+                            CHÍNH THỨC
+                          </span>
+                          <span>Thông Báo Thu Gom Lưu Động Chính Thức</span>
+                        </div>
+                      )}
+
+                      <div className="whitespace-pre-line">
+                        {msg.text}
+                      </div>
 
                       {/* Khối đề xuất giá đặc biệt */}
                       {msg.isOffer && msg.offerData && (

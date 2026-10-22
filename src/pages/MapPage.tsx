@@ -32,6 +32,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { CityAnnouncementTicker } from '../components/CityAnnouncementTicker';
 
 type UserWithDistance = UserProfile & {
   distanceKm: number;
@@ -121,6 +122,8 @@ export const MapPage: React.FC<{ onOpenCreateOrder?: () => void }> = ({ onOpenCr
 
   return (
     <div className="space-y-4">
+      {/* 0. DẢI CHẠY CHỮ THÔNG BÁO THU MUA THEO TỈNH / THÀNH PHỐ */}
+      <CityAnnouncementTicker />
       
       {/* THÔNG BÁO DÀNH CHO NGƯỜI BÁN: CHỈ HIỂN THỊ 1 NGƯỜI MUA DUY NHẤT GẦN NHẤT */}
       {currentUser.role === 'seller' && (

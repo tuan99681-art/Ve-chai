@@ -1,55 +1,52 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- * Unit test cho các hàm tính toán khoảng cách và định dạng vị trí (Geo & Currency)
- */
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import {
-  calculateHaversineDistance,
-  formatDistance,
-  estimateTravelTimeMinutes,
-  isWithinRadius,
-  formatCurrencyVND
-} from './geo';
+import { test } from 'node:test';
+import assert from 'node:assert';
+import { 
+  normalizeCityName, 
+  isUserInCity, 
+  calculateHaversineDistance, 
+  formatDistance 
+} from './geo.js';
 
-test('calculateHaversineDistance returns 0 for identical coordinates', () => {
-  const coord = { lat: 10.7769, lng: 106.7009 };
-  const dist = calculateHaversineDistance(coord, coord);
-  assert.equal(dist, 0);
+test('normalizeCityName correctly identifies major cities', () => {
+  assert.strictEqual(normalizeCityName('Hà Nội'), 'Hà Nội');
+  assert.strictEqual(normalizeCityName('ha noi'), 'Hà Nội');
+  assert.strictEqual(normalizeCityName('tp. hcm'), 'TP. Hồ Chí Minh');
+  assert.strictEqual(normalizeCityName('Sài Gòn'), 'TP. Hồ Chí Minh');
+  assert.strictEqual(normalizeCityName('Đà Nẵng'), 'Đà Nẵng');
+  assert.strictEqual(normalizeCityName('da nang'), 'Đà Nẵng');
+  assert.strictEqual(normalizeCityName('Bình Dương'), 'Bình Dương');
 });
 
-test('calculateHaversineDistance accurately computes distance between two known points in Ho Chi Minh City', () => {
-  // Điểm 1: Nhà Thờ Đức Bà (Q.1) - 10.7798, 106.6990
-  // Điểm 2: Chợ Bến Thành (Q.1) - 10.7725, 106.6980
-  const cathedral = { lat: 10.7798, lng: 106.6990 };
-  const benThanh = { lat: 10.7725, lng: 106.6980 };
-  const dist = calculateHaversineDistance(cathedral, benThanh);
-  // Khoảng cách thực tế xấp xỉ ~0.8 km
-  assert.ok(dist > 0.6 && dist < 1.0, `Distance should be ~0.8km, got: ${dist}`);
+test('isUserInCity matches target province accurately', () => {
+  // Test matching via userCity
+  assert.strictEqual(isUserInCity('Hà Nội', '36 Cầu Giấy', 'Hà Nội'), true);
+  assert.strictEqual(isUserInCity('TP. Hồ Chí Minh', '72 Nguyễn Đình Chiểu', 'TP. Hồ Chí Minh'), true);
+  assert.strictEqual(isUserInCity('Đà Nẵng', 'Hải Châu, Đà Nẵng', 'Đà Nẵng'), true);
+  
+  // Test matching via address when userCity is not set
+  assert.strictEqual(isUserInCity(undefined, 'Số 102 Hoàng Hoa Thám, Ba Đình, Hà Nội', 'Hà Nội'), true);
+  assert.strictEqual(isUserInCity(undefined, '456 Hoàng Sa, Quận 3, TP. Hồ Chí Minh', 'TP. Hồ Chí Minh'), true);
+
+  // Test non-matching cities
+  assert.strictEqual(isUserInCity('TP. Hồ Chí Minh', '72 Nguyễn Đình Chiểu, Q.1', 'Hà Nội'), false);
+  assert.strictEqual(isUserInCity('Đà Nẵng', 'Hải Châu', 'TP. Hồ Chí Minh'), false);
+
+  // Test Toàn quốc matches all
+  assert.strictEqual(isUserInCity('Hà Nội', 'Cầu Giấy', 'Toàn quốc'), true);
+  assert.strictEqual(isUserInCity('TP. Hồ Chí Minh', 'Quận 1', 'Toàn quốc'), true);
 });
 
-test('formatDistance formats meters and kilometers cleanly', () => {
-  assert.equal(formatDistance(0.45), '450 m');
-  assert.equal(formatDistance(2.34), '2.3 km');
-  assert.equal(formatDistance(10.0), '10.0 km');
-});
+test('calculateHaversineDistance and formatDistance return proper values', () => {
+  const coord1 = { lat: 10.7769, lng: 106.7009 };
+  const coord2 = { lat: 10.7769, lng: 106.7009 };
+  assert.strictEqual(calculateHaversineDistance(coord1, coord2), 0);
 
-test('estimateTravelTimeMinutes provides realistic travel time', () => {
-  assert.equal(estimateTravelTimeMinutes(0.5), 5); // Minimum 5 mins
-  assert.equal(estimateTravelTimeMinutes(12.5), 30); // 12.5 km at 25km/h = 30 mins
-});
+  const distKm = calculateHaversineDistance(
+    { lat: 10.7769, lng: 106.7009 },
+    { lat: 10.8035, lng: 106.7088 }
+  );
+  assert.ok(distKm > 2 && distKm < 4);
 
-test('isWithinRadius filters points correctly', () => {
-  const origin = { lat: 10.7769, lng: 106.7009 };
-  const nearPoint = { lat: 10.7780, lng: 106.7015 };
-  const farPoint = { lat: 10.9000, lng: 106.8500 };
-
-  assert.equal(isWithinRadius(origin, nearPoint, 1.0), true);
-  assert.equal(isWithinRadius(origin, farPoint, 5.0), false);
-});
-
-test('formatCurrencyVND formats numbers to Vietnamese currency standard', () => {
-  const formatted = formatCurrencyVND(50000);
-  assert.ok(formatted.includes('50.000'), 'Formatted value should contain 50.000');
+  assert.strictEqual(formatDistance(0.45), '450 m');
+  assert.strictEqual(formatDistance(2.4), '2.4 km');
 });

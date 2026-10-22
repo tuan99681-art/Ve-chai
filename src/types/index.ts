@@ -238,3 +238,17 @@ export interface CityAnnouncement {
   recipientCount?: number;    // Số thành viên thuộc thành phố đã nhận được thông báo
   createdAt: string;
 }
+
+// 18. Thông báo đẩy thời gian thực (Push Notification)
+export interface PushNotification {
+  id: string;
+  title: string;
+  body: string;
+  targetRole?: 'all' | 'seller' | 'buyer';
+  targetCity?: string;
+  urgency?: 'normal' | 'high';
+  url?: string;
+  timestamp: string;
+  icon?: string;
+}
+

@@ -14,6 +14,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { TopHeader } from './components/TopHeader';
 import { BottomNavigation } from './components/BottomNavigation';
+import { PushNotificationToast } from './components/PushNotificationToast';
 import { MapPage } from './pages/MapPage';
 import { OrdersPage } from './pages/OrdersPage';
 import { ChatPage } from './pages/ChatPage';
@@ -33,6 +34,9 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-emerald-500 selection:text-white">
+      {/* 0. Biểu ngữ Thông báo đẩy thời gian thực */}
+      <PushNotificationToast />
+
       {/* 1. Thanh tiêu đề trên cùng */}
       <TopHeader />
 
